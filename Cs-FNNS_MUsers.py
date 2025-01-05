@@ -148,7 +148,15 @@ for i in range(len(secret_image_path_list)):
     optimizer = torch.optim.Adam([w_pert], lr=c.lr)
     weight_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=c.iters, eta_min=c.lr*0.1)
 
+    # 在优化器定义后，迭代前添加
+    initial_beta = c.beta
+    initial_gamma = c.gamma
+
     for iteration_index in range(c.iters):
+        # 渐进式增加beta和gamma权重
+        current_beta = initial_beta * (iteration_index + 1) / c.iters
+        current_gamma = initial_gamma * (iteration_index + 1) / c.iters
+        
         optimizer.zero_grad()
 
         adv_pert = L + (U - L) * ((torch.tanh(w_pert) + 1) / 2)
@@ -156,7 +164,7 @@ for i in range(len(secret_image_path_list)):
         loss = l_hid(adv_pert, w_zero)
         for j in range(c.num_of_receivers):
             output = model_list[j](adv_pert)
-            loss += c.beta * l_rev(output, secret_list[j])
+            loss += current_beta * l_rev(output, secret_list[j])
 
         if c.use_grad_signals_in_steganalysis_nets and (iteration_index + 1) > 1400:
             # # SRNet
@@ -166,7 +174,7 @@ for i in range(len(secret_image_path_list)):
             # # siastegnet
             inputs, labels = preprocess_data((cover_backup + adv_pert) * 255, torch.tensor([0]).to(device), False)
             outputs, feats_0, feats_1 = SiaStegNet(*inputs)
-            loss += c.beta * c.gamma * l_anti_dec(outputs, labels)
+            loss += current_beta * current_gamma * l_anti_dec(outputs, labels)
 
         loss.backward(retain_graph=True)
         optimizer.step()
