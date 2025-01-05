@@ -152,6 +152,12 @@ for i in range(len(secret_image_path_list)):
     initial_beta = c.beta
     initial_gamma = c.gamma
 
+    # 在迭代循环前添加早停相关变量
+    best_loss = float('inf')
+    patience = 50  # 容忍多少次迭代loss没有改善
+    patience_counter = 0
+    min_delta = 1e-4  # 判定loss改善的最小差值
+
     for iteration_index in range(c.iters):
         # 渐进式增加beta和gamma权重
         current_beta = initial_beta * (iteration_index + 1) / c.iters
@@ -167,11 +173,6 @@ for i in range(len(secret_image_path_list)):
             loss += current_beta * l_rev(output, secret_list[j])
 
         if c.use_grad_signals_in_steganalysis_nets and (iteration_index + 1) > 1400:
-            # # SRNet
-            # inputs = (cover_backup + adv_pert); labels = torch.tensor([0]).to(device)
-            # outputs = SRNet(inputs)
-            # loss +=  c.beta * c.gamma * l_anti_dec(outputs, labels)
-            # # siastegnet
             inputs, labels = preprocess_data((cover_backup + adv_pert) * 255, torch.tensor([0]).to(device), False)
             outputs, feats_0, feats_1 = SiaStegNet(*inputs)
             loss += current_beta * current_gamma * l_anti_dec(outputs, labels)
@@ -179,6 +180,19 @@ for i in range(len(secret_image_path_list)):
         loss.backward(retain_graph=True)
         optimizer.step()
         weight_scheduler.step()
+
+        # 早停检查
+        current_loss = loss.item()
+        if current_loss < best_loss - min_delta:
+            best_loss = current_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        # 如果连续patience次迭代都没有改善，则提前停止
+        if patience_counter >= patience:
+            logger.info(f'Early stopping at iteration {iteration_index} due to no improvement in loss')
+            break
 
     logger.info('-' * 60)
     adv_pert = L + (U - L) * ((torch.tanh(w_pert) + 1) / 2)
