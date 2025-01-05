@@ -146,7 +146,7 @@ for i in range(len(secret_image_path_list)):
 
     # optimizator
     optimizer = torch.optim.Adam([w_pert], lr=c.lr)
-    weight_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 500, gamma=0.5)
+    weight_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=200, verbose=True)
 
     for iteration_index in range(c.iters):
         optimizer.zero_grad()
@@ -170,7 +170,7 @@ for i in range(len(secret_image_path_list)):
 
         loss.backward(retain_graph=True)
         optimizer.step()
-        weight_scheduler.step()
+        weight_scheduler.step(loss.item())
 
     logger.info('-' * 60)
     adv_pert = L + (U - L) * ((torch.tanh(w_pert) + 1) / 2)
